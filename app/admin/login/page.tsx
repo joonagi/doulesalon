@@ -7,6 +7,8 @@ export const metadata: Metadata = {
   title: "관리자 로그인 | DOULE SALON"
 };
 
+export const dynamic = "force-dynamic";
+
 export default function AdminLoginPage() {
   return (
     <main className="admin-auth-page">
