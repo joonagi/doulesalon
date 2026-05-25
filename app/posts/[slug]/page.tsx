@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import { CategoryBadge } from "@/components/CategoryBadge";
+import { PostBody } from "@/components/PostBody";
 import { PostCard } from "@/components/PostCard";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
-import { estimateReadTime, formatDate, getPublishedPostBySlug, getPublishedPosts, markdownToParagraphs } from "@/lib/posts";
+import { estimateReadTime, formatDate, getPublishedPostBySlug, getPublishedPosts } from "@/lib/posts";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -62,11 +63,7 @@ export default async function PostPage({ params }: PageProps) {
             <p className="article-summary">{post.excerpt}</p>
           </header>
 
-          <section className="article-body">
-            {markdownToParagraphs(post.bodyMarkdown).map((paragraph) => (
-              <p key={paragraph}>{paragraph}</p>
-            ))}
-          </section>
+          <PostBody bodyMarkdown={post.bodyMarkdown} />
         </article>
 
         {related.length > 0 ? (

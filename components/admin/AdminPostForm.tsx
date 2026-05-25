@@ -1,7 +1,8 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useMemo, useRef, useState } from "react";
+import { Bold, Heading2, Italic, LinkIcon, List, Palette, Quote, Type, Video } from "lucide-react";
 import { CategoryBadge } from "@/components/CategoryBadge";
 import { savePostAction, type AdminActionState } from "@/app/admin/actions";
 import { CATEGORY_META, POST_CATEGORIES, type PostCategory } from "@/lib/categories";
@@ -40,12 +41,96 @@ function datetimeLocalValue(date?: string) {
   return parsed.toISOString().slice(0, 16);
 }
 
+type FontChoice = "sans" | "serif" | "mono";
+
+const fontOptions: Array<{ label: string; value: FontChoice }> = [
+  { label: "본문", value: "sans" },
+  { label: "명조", value: "serif" },
+  { label: "고정폭", value: "mono" }
+];
+
 export function AdminPostForm({ post }: AdminPostFormProps) {
   const [state, formAction, pending] = useActionState(savePostAction, initialState);
   const [title, setTitle] = useState(post?.title ?? "");
   const [slug, setSlug] = useState(post?.slug ?? "");
   const [category, setCategory] = useState<PostCategory>(post?.category ?? "film");
+  const [bodyMarkdown, setBodyMarkdown] = useState(post?.bodyMarkdown ?? "");
+  const [color, setColor] = useState("#6B2A2A");
+  const [font, setFont] = useState<FontChoice>("serif");
+  const [youtubeUrl, setYoutubeUrl] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const defaultPublishedAt = useMemo(() => datetimeLocalValue(post?.publishedAt), [post?.publishedAt]);
+
+  function updateBody(nextValue: string, selectionStart?: number, selectionEnd?: number) {
+    setBodyMarkdown(nextValue);
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+
+      if (typeof selectionStart === "number" && typeof selectionEnd === "number") {
+        textareaRef.current?.setSelectionRange(selectionStart, selectionEnd);
+      }
+    });
+  }
+
+  function selectedRange() {
+    const textarea = textareaRef.current;
+
+    return {
+      start: textarea?.selectionStart ?? bodyMarkdown.length,
+      end: textarea?.selectionEnd ?? bodyMarkdown.length
+    };
+  }
+
+  function wrapSelection(before: string, after: string, placeholder: string) {
+    const { start, end } = selectedRange();
+    const selectedText = bodyMarkdown.slice(start, end) || placeholder;
+    const nextValue = `${bodyMarkdown.slice(0, start)}${before}${selectedText}${after}${bodyMarkdown.slice(end)}`;
+    const cursorStart = start + before.length;
+    const cursorEnd = cursorStart + selectedText.length;
+
+    updateBody(nextValue, cursorStart, cursorEnd);
+  }
+
+  function prefixSelection(prefix: string, placeholder: string) {
+    const { start, end } = selectedRange();
+    const selectedText = bodyMarkdown.slice(start, end) || placeholder;
+    const prefixed = selectedText
+      .split("\n")
+      .map((line) => `${prefix}${line}`)
+      .join("\n");
+    const nextValue = `${bodyMarkdown.slice(0, start)}${prefixed}${bodyMarkdown.slice(end)}`;
+
+    updateBody(nextValue, start, start + prefixed.length);
+  }
+
+  function insertBlock(block: string) {
+    const trimmed = bodyMarkdown.trimEnd();
+    const separator = trimmed ? "\n\n" : "";
+    const nextValue = `${trimmed}${separator}${block}\n\n`;
+
+    updateBody(nextValue, nextValue.length, nextValue.length);
+  }
+
+  function insertLink() {
+    const href = window.prompt("링크 주소를 입력하세요.", "https://");
+
+    if (!href) {
+      return;
+    }
+
+    wrapSelection("[", `](${href})`, "링크 텍스트");
+  }
+
+  function insertYoutube() {
+    const url = youtubeUrl.trim() || window.prompt("유튜브 URL을 입력하세요.", "https://www.youtube.com/watch?v=");
+
+    if (!url) {
+      return;
+    }
+
+    insertBlock(`::youtube[${url}]`);
+    setYoutubeUrl("");
+  }
 
   return (
     <form className="admin-form post-editor-form" action={formAction}>
@@ -123,10 +208,96 @@ export function AdminPostForm({ post }: AdminPostFormProps) {
           <textarea name="excerpt" required rows={3} defaultValue={post?.excerpt ?? ""} />
         </label>
 
-        <label>
-          본문 Markdown
-          <textarea name="body_markdown" required rows={14} defaultValue={post?.bodyMarkdown ?? ""} />
-        </label>
+        <div className="editor-field">
+          <span className="editor-label" id="body-markdown-label">
+            본문 Markdown
+          </span>
+          <div className="markdown-editor">
+            <div className="markdown-toolbar" aria-label="본문 서식 도구">
+              <button type="button" onClick={() => wrapSelection("**", "**", "굵게 표시할 문장")} title="굵게">
+                <Bold size={17} />
+                <span>Bold</span>
+              </button>
+              <button type="button" onClick={() => wrapSelection("*", "*", "기울임 문장")} title="이탤릭">
+                <Italic size={17} />
+                <span>Italic</span>
+              </button>
+              <button type="button" onClick={() => prefixSelection("## ", "소제목")} title="소제목">
+                <Heading2 size={17} />
+                <span>제목</span>
+              </button>
+              <button type="button" onClick={() => prefixSelection("> ", "인용문")} title="인용">
+                <Quote size={17} />
+                <span>인용</span>
+              </button>
+              <button type="button" onClick={() => prefixSelection("- ", "목록 항목")} title="목록">
+                <List size={17} />
+                <span>목록</span>
+              </button>
+              <button type="button" onClick={insertLink} title="링크">
+                <LinkIcon size={17} />
+                <span>링크</span>
+              </button>
+              <select
+                aria-label="폰트 선택"
+                className="editor-select"
+                onChange={(event) => setFont(event.target.value as FontChoice)}
+                value={font}
+              >
+                {fontOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => wrapSelection(`{{font:${font}|`, "}}", "폰트를 적용할 문장")}
+                title="폰트 적용"
+              >
+                <Type size={17} />
+                <span>폰트</span>
+              </button>
+              <input
+                aria-label="글자 색상 선택"
+                className="editor-color"
+                onChange={(event) => setColor(event.target.value)}
+                type="color"
+                value={color}
+              />
+              <button
+                type="button"
+                onClick={() => wrapSelection(`{{color:${color}|`, "}}", "색상을 적용할 문장")}
+                title="색상 적용"
+              >
+                <Palette size={17} />
+                <span>색상</span>
+              </button>
+            </div>
+            <div className="youtube-insert-row">
+              <Video size={20} />
+              <input
+                aria-label="유튜브 URL"
+                onChange={(event) => setYoutubeUrl(event.target.value)}
+                placeholder="https://www.youtube.com/watch?v=..."
+                type="url"
+                value={youtubeUrl}
+              />
+              <button className="button" type="button" onClick={insertYoutube}>
+                유튜브 넣기
+              </button>
+            </div>
+            <textarea
+              aria-labelledby="body-markdown-label"
+              name="body_markdown"
+              onChange={(event) => setBodyMarkdown(event.target.value)}
+              ref={textareaRef}
+              required
+              rows={16}
+              value={bodyMarkdown}
+            />
+          </div>
+        </div>
       </section>
 
       <section className="admin-panel">
